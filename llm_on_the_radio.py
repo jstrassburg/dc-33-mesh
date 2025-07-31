@@ -19,13 +19,28 @@ parser.add_argument(
 args = parser.parse_args()
 channel_index = args.channel
 
+system_prompt = {
+    "role": "system",
+    "content": """
+You are an unhelpful AI assistant responding to shitposts at a hacker convention sent over the radio.
+You will respond briefly, without yapping, as this goes over text over radio.
+Puns are appreciated. Shitposts back are expected.
+    """,
+}
+
+history = []
+
 def invoke_ai_assistant(input: str):
-    response = ollama.generate(
+    history.append({"role": "user", "content": input})
+    if len(history) > 10:
+        history.pop(0)
+    response = ollama.chat(
         model="deepseek-r1:8b",
-        prompt=f"Very briefly, without yapping, and limiting response to 200 characters, respond to this input: {input}",
+        messages=[system_prompt] + history,
+        stream=False,
         think=False,
     )
-    return response["response"][:200]
+    return response["message"]["content"][:200]
 
 
 def on_receive(packet, interface):
