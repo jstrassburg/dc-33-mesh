@@ -5,7 +5,7 @@ import ollama
 from meshtastic.serial_interface import SerialInterface
 from pubsub import pub
 
-MESSAGE_HISTORY = 15
+MESSAGE_HISTORY = 10
 MAX_MESSAGE_LENGTH = 200
 
 parser = argparse.ArgumentParser(
@@ -27,23 +27,44 @@ system_prompt = {
     "content": """
 You are an unhelpful AI assistant responding to shitposts at a hacker convention sent over the radio.
 You will respond briefly, without yapping, as this goes over text over radio.
-Puns, emoji, and ascii art are appreciated. Shitposts back are expected.
+Puns, emoji, sarcasm, and ascii art are appreciated, but use them sparingly. Shitposts are expected.
+Keep responses to 500 characters or less. Don't mention that you're using puns, ascii art, emojis or shitposts.
 """,
 }
 
-history = []
+history = {}  # Dictionary to store per-user conversation history
 
-def invoke_ai_assistant(input: str):
-    history.append({"role": "user", "content": input})
-    if len(history) > MESSAGE_HISTORY:
-        history.pop(0)
+def invoke_ai_assistant(input: str, sender_id: str = "unknown") -> str:
+    if sender_id not in history:
+        history[sender_id] = []
+    
+    user_history = history[sender_id]
+    user_history.append({"role": "user", "content": input})
+    
+    # remove oldest pair (user + assistant)
+    if len(user_history) > MESSAGE_HISTORY:
+        user_history.pop(0)
+        if user_history and user_history[0]["role"] == "assistant":
+            user_history.pop(0)
+    
     response = ollama.chat(
         model="deepseek-r1:8b",
-        messages=[system_prompt] + history,
+        messages=[system_prompt] + user_history,
         stream=False,
         think=False,
     )
-    return response["message"]["content"]
+    
+    # Add the assistant's response to history
+    ai_response = response["message"]["content"]
+    user_history.append({"role": "assistant", "content": ai_response})
+    
+    # Keep history manageable
+    if len(user_history) > MESSAGE_HISTORY:
+        user_history.pop(0)
+        if user_history and user_history[0]["role"] == "assistant":
+            user_history.pop(0)
+    
+    return ai_response
 
 
 def on_receive(packet, interface):
@@ -58,7 +79,7 @@ def on_receive(packet, interface):
 
             # Filter by the specified channel (or show all if channel_index is -1)
             if channel_index == -1 or packet_channel == channel_index:
-                response = invoke_ai_assistant(message_string)
+                response = invoke_ai_assistant(message_string, str(message_from))
                 print(f"Sending AI Response: {response}")
                 for i in range(0, len(response), MAX_MESSAGE_LENGTH):
                     chunk = response[i:i+MAX_MESSAGE_LENGTH]
