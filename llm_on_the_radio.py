@@ -5,6 +5,9 @@ import ollama
 from meshtastic.serial_interface import SerialInterface
 from pubsub import pub
 
+MESSAGE_HISTORY = 15
+MAX_MESSAGE_LENGTH = 200
+
 parser = argparse.ArgumentParser(
     description="Listen for Meshtastic messages on a specific channel, funnel them to an AI assistant, and send responses."
 )
@@ -24,15 +27,15 @@ system_prompt = {
     "content": """
 You are an unhelpful AI assistant responding to shitposts at a hacker convention sent over the radio.
 You will respond briefly, without yapping, as this goes over text over radio.
-Puns are appreciated. Shitposts back are expected.
-    """,
+Puns, emoji, and ascii art are appreciated. Shitposts back are expected.
+""",
 }
 
 history = []
 
 def invoke_ai_assistant(input: str):
     history.append({"role": "user", "content": input})
-    if len(history) > 10:
+    if len(history) > MESSAGE_HISTORY:
         history.pop(0)
     response = ollama.chat(
         model="deepseek-r1:8b",
@@ -40,7 +43,7 @@ def invoke_ai_assistant(input: str):
         stream=False,
         think=False,
     )
-    return response["message"]["content"][:200]
+    return response["message"]["content"]
 
 
 def on_receive(packet, interface):
@@ -50,13 +53,16 @@ def on_receive(packet, interface):
             message_bytes = packet["decoded"]["payload"]
             message_string = message_bytes.decode("utf-8")
             packet_channel = packet.get("channel", 0)
-            print(f"Incomming message: [Channel {packet_channel}] {message_string}")
+            message_from = packet.get("from", "unknown")
+            print(f"Incomming message: [Channel: {packet_channel}, From: {message_from}] {message_string}")
 
             # Filter by the specified channel (or show all if channel_index is -1)
             if channel_index == -1 or packet_channel == channel_index:
                 response = invoke_ai_assistant(message_string)
                 print(f"Sending AI Response: {response}")
-                interface.sendText(response, channelIndex=packet_channel)
+                for i in range(0, len(response), MAX_MESSAGE_LENGTH):
+                    chunk = response[i:i+MAX_MESSAGE_LENGTH]
+                    interface.sendText(chunk, channelIndex=packet_channel)
             else:
                 print(f"Message on channel {packet_channel} ignored as it wasn't channel {channel_index}.")
 
