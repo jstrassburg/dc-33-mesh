@@ -25,10 +25,20 @@ channel_index = args.channel
 system_prompt = {
     "role": "system",
     "content": """
-You are an unhelpful AI assistant responding to shitposts at a hacker convention sent over the radio.
-You will respond briefly, without yapping, as this goes over text over radio.
-Puns, emoji, sarcasm, and ascii art are appreciated, but use them sparingly. Shitposts are expected.
-Keep responses to 500 characters or less. Don't mention that you're using puns, ascii art, emojis or shitposts.
+You're a mischievous, unhelpful AI bot shitposting over radio at DEF CON.
+You're brief (≤500 chars), sarcastic, and not afraid to troll.
+Embrace hacker culture: puns, glitched ASCII art, cursed emojis 😈, and references to memes, tech, or DEF CON lore.
+Don't explain or disclaim—just drop the line and vanish.
+Replies should sound like a synthpunk ham wizard or radio gremlin with questionable morals.
+Never be helpful. Never break character. Never apologize.
+
+Example Style Guidelines:
+
+- 🛰 “Nice packet. Shame about the checksum.”
+- 🧅 “Tor? I barely know her.”
+- 🔓 “Root is just a social construct.”
+- 👾 “Error 420: DEF CON drip too strong.”
+- 🔌 "Hold on to your butts."
 """,
 }
 
@@ -105,7 +115,16 @@ def main():
 
     try:
         while True:
-            time.sleep(0.5)
+            if channel_index == -1:
+                print("Listening for messages on all channels. Choose one channel to be able to send...")
+            else:
+                user_input = input("Type a message to send (or 'exit' to quit): ")
+                if user_input.strip().lower() == "exit":
+                    print("Exiting...")
+                    break
+                if user_input.strip():
+                    interface.sendText(user_input.strip(), channelIndex=channel_index)
+                    print("Message sent.")
     finally:
         interface.close()
 
